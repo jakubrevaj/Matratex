@@ -4,11 +4,15 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { Order } from '../../orders/entities/order.entity';
+import { Mattress } from '../../mattresses/entities/mattress.entity';
 import { Invoice } from 'src/invoices/entities/invoice.entity';
 
 @Entity('order_items')
+@Index(['status'])
+@Index(['product_name'])
 export class OrderItem {
   @PrimaryGeneratedColumn()
   id: number;
@@ -75,5 +79,5 @@ export class OrderItem {
   order: Order;
   static status: string;
   name: string;
-  product: any;
+  product: Mattress;
 }

@@ -36,6 +36,7 @@ export class HistoricalOrdersService {
 
     const historicalOrder = this.historicalOrderRepo.create({
       order_number: order.order_number,
+      customer: order.customer,
       customer_name: order.customer?.podnik || 'Neznámy zákazník',
       ico: order.customer?.ico,
       issue_date: order.issue_date,
@@ -80,7 +81,7 @@ export class HistoricalOrdersService {
   async getById(id: number): Promise<HistoricalOrder | null> {
     return await this.historicalOrderRepo.findOne({
       where: { id },
-      relations: ['order_items'],
+      relations: ['order_items', 'customer'],
     });
   }
 

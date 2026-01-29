@@ -1,6 +1,16 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  PrimaryGeneratedColumn,
+  Index,
+  OneToMany,
+} from 'typeorm';
+import { Order } from '../orders/entities/order.entity';
 
 @Entity('customers')
+@Index(['podnik'])
+@Index(['email'])
+@Index(['ico'])
 export class Customer {
   @PrimaryGeneratedColumn()
   id: number;
@@ -79,7 +89,10 @@ export class Customer {
 
   @Column({ type: 'varchar', length: 1, nullable: true })
   sk: string | null;
-  orders: any;
+
+  // Relácia k objednávkam
+  @OneToMany(() => Order, (order) => order.customer)
+  orders: Order[];
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   email: string | null;

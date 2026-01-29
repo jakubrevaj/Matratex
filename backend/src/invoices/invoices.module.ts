@@ -6,11 +6,15 @@ import { Invoice } from './entities/invoice.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderItem } from '../order-items/entities/order-item.entity';
 import { HistoricalOrdersModule } from 'src/historical-orders/historical-orders.module';
+import { EmailModule } from '../email/email.module';
+import { PaymentTrackingModule } from '../payment-tracking/payment-tracking.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Invoice, Order, OrderItem]),
     HistoricalOrdersModule,
+    EmailModule,
+    PaymentTrackingModule,
   ],
   controllers: [InvoicesController],
   providers: [InvoicesService],

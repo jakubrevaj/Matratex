@@ -1,5 +1,5 @@
 // src/archived-items/archived-items.controller.ts
-import { Controller, Post, Param, Get } from '@nestjs/common';
+import { Controller, Post, Param, Get, ParseIntPipe } from '@nestjs/common';
 import { ArchivedItemsService } from './archived-items.service';
 import { ArchivedItem } from './entities/archived-item-entity';
 
@@ -8,8 +8,8 @@ export class ArchivedItemsController {
   constructor(private readonly archivedItemsService: ArchivedItemsService) {}
 
   @Post(':id')
-  async archiveItem(@Param('id') id: number) {
-    await this.archivedItemsService.archiveItem(+id);
+  async archiveItem(@Param('id', ParseIntPipe) id: number) {
+    await this.archivedItemsService.archiveItem(id);
     return { message: 'Položka bola úspešne archivovaná.' };
   }
 

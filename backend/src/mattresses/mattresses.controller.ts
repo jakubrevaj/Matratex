@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { MattressesService } from './mattresses.service';
 import { Mattress } from './entities/mattress.entity';
@@ -25,18 +26,21 @@ export class MattressesController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: number) {
-    return this.mattressesService.findOne(+id);
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.mattressesService.findOne(id);
   }
 
   @Put(':id')
-  async update(@Param('id') id: number, @Body() data: Partial<Mattress>) {
-    return this.mattressesService.update(+id, data);
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: Partial<Mattress>,
+  ) {
+    return this.mattressesService.update(id, data);
   }
 
   @Delete(':id')
-  async remove(@Param('id') id: number) {
-    await this.mattressesService.remove(+id);
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    await this.mattressesService.remove(id);
     return { message: 'Mattress deleted successfully' };
   }
 }

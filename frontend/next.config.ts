@@ -2,10 +2,23 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   eslint: {
-    ignoreDuringBuilds: true, // Ignoruje ESLint chyby pri buildovaní
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    ignoreBuildErrors: true, // Ignoruje TypeScript chyby pri buildovaní
+    ignoreBuildErrors: false,
+  },
+  // Performance optimizations
+  compress: true,
+  poweredByHeader: false,
+  generateEtags: true,
+  // Image optimization
+  images: {
+    formats: ['image/webp', 'image/avif'],
+    minimumCacheTTL: 60,
+  },
+  // Experimental features for better performance
+  experimental: {
+    optimizePackageImports: ['@mui/material', '@mui/icons-material'],
   },
 };
 

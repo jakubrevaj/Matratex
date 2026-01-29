@@ -1,6 +1,9 @@
 import './globals.css';
-import Navbar from '../components/Navbar';
 import EmotionProvider from '@/components/EmotionProvider';
+import ToastProvider from '@/components/ToastProvider';
+import KeyboardShortcutsProvider from '@/components/KeyboardShortcutsProvider';
+import ErrorBoundary from '@/components/ErrorBoundary';
+import FloatingShortcuts from '@/components/FloatingShortcuts';
 
 export default function RootLayout({
   children,
@@ -10,10 +13,15 @@ export default function RootLayout({
   return (
     <html lang="sk">
       <body>
-        <EmotionProvider>
-          <Navbar />
-          <main>{children}</main>
-        </EmotionProvider>
+        <ErrorBoundary>
+          <EmotionProvider>
+            <KeyboardShortcutsProvider>
+              {children}
+              <ToastProvider />
+              <FloatingShortcuts />
+            </KeyboardShortcutsProvider>
+          </EmotionProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

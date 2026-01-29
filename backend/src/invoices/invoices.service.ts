@@ -1,14 +1,17 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Get, Injectable, NotFoundException } from '@nestjs/common';
+import { Get, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
+import { Like, Repository, DataSource } from 'typeorm';
 import { Invoice } from './entities/invoice.entity';
 import { Order } from '../orders/entities/order.entity';
 import { OrderItem } from '../order-items/entities/order-item.entity';
+import { EmailService } from '../email/email.service';
+import { PaymentTrackingService } from '../payment-tracking/payment-tracking.service';
 import * as pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import { Response } from 'express';
 import * as QRCode from 'qrcode';
+import * as ExcelJS from 'exceljs';
 
 (pdfMake as any).vfs = (pdfFonts as any).vfs;
 
@@ -16,25 +19,151 @@ type ProductionStatus = 'pending' | 'in-production' | 'completed' | 'invoiced';
 
 @Injectable()
 export class InvoicesService {
-  prisma: any;
-  async findAll() {
-    const invoices = await this.invoiceRepo.find({
-      order: {
-        created_at: 'DESC',
-      },
-    });
+  private readonly logger = new Logger(InvoicesService.name);
+  async findAll(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+  }) {
+    const page = params?.page || 1;
+    const limit = params?.limit || 10;
+    const search = params?.search || '';
+    const status = params?.status || '';
 
-    return invoices.map((inv) => ({
+    const queryBuilder = this.invoiceRepo.createQueryBuilder('invoice');
+
+    // Vyhľadávanie
+    if (search) {
+      queryBuilder.where(
+        '(invoice.invoice_number ILIKE :search OR invoice.customer_name ILIKE :search OR invoice.order_number ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    // Filtrovanie podľa stavu
+    if (status) {
+      if (search) {
+        queryBuilder.andWhere('invoice.status = :status', { status });
+      } else {
+        queryBuilder.where('invoice.status = :status', { status });
+      }
+    }
+
+    // Zoradenie
+    queryBuilder.orderBy('invoice.created_at', 'DESC');
+
+    // Paginácia
+    const offset = (page - 1) * limit;
+    queryBuilder.skip(offset).take(limit);
+
+    const [invoices, total] = await queryBuilder.getManyAndCount();
+
+    const mappedInvoices = invoices.map((inv) => ({
       id: inv.id,
       invoice_number: inv.invoice_number,
       customer_name: inv.customer_name ?? 'Neznámy zákazník',
       total_price: inv.total_price,
       created_at: inv.created_at,
-      order_number: inv.order_number ?? '-', // ← použiješ tu
+      order_number: inv.order_number ?? '-',
+      status: inv.status,
     }));
+
+    return {
+      success: true,
+      data: mappedInvoices,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
-  invoicesService: any;
+  async exportToExcel(params?: {
+    search?: string;
+    status?: string;
+  }): Promise<Buffer> {
+    const queryBuilder = this.invoiceRepo.createQueryBuilder('invoice');
+
+    // Vyhľadávanie
+    if (params?.search) {
+      queryBuilder.where(
+        '(invoice.invoice_number ILIKE :search OR invoice.customer_name ILIKE :search OR invoice.order_number ILIKE :search)',
+        { search: `%${params.search}%` },
+      );
+    }
+
+    // Filtrovanie podľa stavu
+    if (params?.status) {
+      if (params?.search) {
+        queryBuilder.andWhere('invoice.status = :status', {
+          status: params.status,
+        });
+      } else {
+        queryBuilder.where('invoice.status = :status', {
+          status: params.status,
+        });
+      }
+    }
+
+    // Zoradenie
+    queryBuilder.orderBy('invoice.created_at', 'DESC');
+
+    const invoices = await queryBuilder.getMany();
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Faktúry');
+
+    worksheet.columns = [
+      { header: 'Číslo faktúry', key: 'invoice_number', width: 20 },
+      { header: 'Zákazník', key: 'customer_name', width: 30 },
+      { header: 'Objednávka', key: 'order_number', width: 20 },
+      { header: 'Cena bez DPH (€)', key: 'total_price', width: 18 },
+      { header: 'Cena s DPH (€)', key: 'total_with_vat', width: 18 },
+      { header: 'Stav', key: 'status', width: 15 },
+      { header: 'Dátum vytvorenia', key: 'created_at', width: 20 },
+    ];
+
+    invoices.forEach((inv) => {
+      const net = Number(inv.total_price) || 0;
+      const gross = +(net * 1.23).toFixed(2);
+      worksheet.addRow({
+        invoice_number: inv.invoice_number,
+        customer_name: inv.customer_name ?? 'Neznámy zákazník',
+        order_number: inv.order_number ?? '-',
+        total_price: net.toFixed(2),
+        total_with_vat: gross.toFixed(2),
+        status: this.getStatusLabel(inv.status),
+        created_at: new Date(inv.created_at).toLocaleDateString('sk-SK'),
+      });
+    });
+
+    // Formátovanie hlavičky
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF9C27B0' },
+    };
+    worksheet.getRow(1).font = {
+      ...worksheet.getRow(1).font,
+      color: { argb: 'FFFFFFFF' },
+    };
+
+    return (await workbook.xlsx.writeBuffer()) as Buffer;
+  }
+
+  private getStatusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      paid: 'Zaplatená',
+      unpaid: 'Nezaplatená',
+      overdue: 'Po splatnosti',
+      partially_paid: 'Čiastočne zaplatená',
+    };
+    return labels[status] || status;
+  }
+
+  // invoicesService: InvoicesService; // Circular dependency, odstránené
 
   constructor(
     @InjectRepository(Order)
@@ -45,11 +174,15 @@ export class InvoicesService {
 
     @InjectRepository(Invoice)
     private readonly invoiceRepo: Repository<Invoice>,
+
+    private readonly emailService: EmailService,
+    private readonly paymentTrackingService: PaymentTrackingService,
+    private readonly dataSource: DataSource,
   ) {}
 
   @Get()
   getAllInvoices() {
-    return this.invoicesService.findAll();
+    return this.findAll();
   }
 
   async createInvoiceForCompletedItems(orderId: number): Promise<Invoice> {
@@ -110,8 +243,8 @@ export class InvoicesService {
 
     const invoice = this.invoiceRepo.create({
       invoice_number: invoiceNumber,
-      orderId: order.id, // ✅ DOPLN TOTO!
-      order_number: order.order_number, // ✅ pridaj sem
+      orderId: order.id,
+      order_number: order.order_number,
       total_price: totalPrice,
       notes: '',
       customer_name: order.customer?.podnik ?? 'Neznámy zákazník',
@@ -124,12 +257,40 @@ export class InvoicesService {
       items: itemsSnapshot,
     });
 
-    await this.invoiceRepo.save(invoice);
+    const savedInvoice = await this.invoiceRepo.save(invoice);
+
+    // 🧾 AUTOMATICKÉ FAKTUROVÁNIE - Email a Payment Tracking
+    try {
+      // 1. Pošli email zákazníkovi
+      const emailResult = await this.emailService.sendInvoice(savedInvoice);
+      if (emailResult.sent) {
+        this.logger.log(
+          `📧 Email s faktúrou ${savedInvoice.invoice_number} odoslaný zákazníkovi ${savedInvoice.customer_name}`,
+        );
+      } else {
+        this.logger.warn(
+          `⚠️ Email sa nepodarilo odoslať pre faktúru ${savedInvoice.invoice_number}: ${emailResult.message}`,
+        );
+      }
+
+      // 2. Nastav sledovanie platby
+      await this.paymentTrackingService.trackInvoice(savedInvoice);
+      this.logger.log(
+        `📊 Sledovanie platby nastavené pre faktúru ${savedInvoice.invoice_number}`,
+      );
+    } catch (error) {
+      this.logger.error('Chyba pri automatickom fakturovaní:', error);
+      // Pokračujeme aj keď email zlyhá
+    }
 
     order.production_status = this.computeProductionStatus(order.order_items);
     await this.orderRepo.save(order);
 
-    return invoice;
+    this.logger.log(
+      `✅ Faktúra ${savedInvoice.invoice_number} vytvorená pre objednávku ${order.order_number}`,
+    );
+
+    return savedInvoice;
   }
 
   async createInvoice(orderId: number): Promise<Invoice> {
@@ -240,12 +401,13 @@ export class InvoicesService {
               text: `FAKTÚRA ${invoice.invoice_number}`,
               alignment: 'center',
               bold: true,
-              fontSize: 16,
-              margin: [0, 15, 0, 0],
+              fontSize: 24,
+              margin: [0, 25, 0, 0],
+              color: '#1976d2',
             },
             {
               image: qrCode,
-              width: 70,
+              width: 80,
               alignment: 'right',
             },
           ],
@@ -259,13 +421,30 @@ export class InvoicesService {
                 {
                   text: 'DODÁVATEĽ',
                   style: 'tableHeaderBlue',
-                  margin: [0, 0, 0, 5],
+                  margin: [0, 0, 0, 8],
                 },
-                { text: 'Matratex s.r.o.', fontSize: 9 },
-                { text: 'Príkladná 123, 01001 Žilina', fontSize: 9 },
-                { text: 'IČO: 12345678   DIČ: 87654321', fontSize: 9 },
-                { text: 'IČ DPH: SK1234567890', fontSize: 9 },
-                { text: 'info@matratex.sk', fontSize: 9 },
+                {
+                  text: 'Matratex s.r.o.',
+                  fontSize: 11,
+                  bold: true,
+                  margin: [0, 0, 0, 3],
+                },
+                {
+                  text: 'Príkladná 123, 01001 Žilina',
+                  fontSize: 10,
+                  margin: [0, 0, 0, 2],
+                },
+                {
+                  text: 'IČO: 12345678   DIČ: 87654321',
+                  fontSize: 10,
+                  margin: [0, 0, 0, 2],
+                },
+                {
+                  text: 'IČ DPH: SK1234567890',
+                  fontSize: 10,
+                  margin: [0, 0, 0, 2],
+                },
+                { text: 'info@matratex.sk', fontSize: 10 },
               ],
             },
             {
@@ -274,12 +453,21 @@ export class InvoicesService {
                 {
                   text: 'ODBERATEĽ',
                   style: 'tableHeaderBlue',
-                  margin: [0, 0, 0, 5],
+                  margin: [0, 0, 0, 8],
                 },
-                { text: invoice.customer_name, fontSize: 9 },
-                { text: invoice.customer_address || '', fontSize: 9 },
+                {
+                  text: invoice.customer_name,
+                  fontSize: 11,
+                  bold: true,
+                  margin: [0, 0, 0, 3],
+                },
+                {
+                  text: invoice.customer_address || '',
+                  fontSize: 10,
+                  margin: [0, 0, 0, 2],
+                },
                 ...(invoice.customer_ico
-                  ? [{ text: `IČO: ${invoice.customer_ico}`, fontSize: 9 }]
+                  ? [{ text: `IČO: ${invoice.customer_ico}`, fontSize: 10 }]
                   : []),
               ],
             },
@@ -288,22 +476,24 @@ export class InvoicesService {
               stack: [
                 {
                   text: `Dátum vystavenia: ${new Date(invoice.issue_date).toLocaleDateString()}`,
-                  fontSize: 9,
+                  fontSize: 10,
+                  margin: [0, 0, 0, 2],
                 },
                 {
                   text: `Dátum dodania: ${new Date(invoice.issue_date).toLocaleDateString()}`,
-                  fontSize: 9,
+                  fontSize: 10,
+                  margin: [0, 0, 0, 2],
                 },
                 {
                   text: `Splatnosť: ${new Date(invoice.due_date || invoice.issue_date).toLocaleDateString()}`,
                   bold: true,
-                  fontSize: 9,
+                  fontSize: 10,
                 },
               ],
             },
           ],
           columnGap: 20,
-          margin: [0, 0, 0, 10],
+          margin: [0, 0, 0, 20],
         },
 
         {
@@ -323,31 +513,31 @@ export class InvoicesService {
                           } €`,
                           bold: true,
                           color: 'white',
-                          fontSize: 12,
-                          margin: [5, 2, 0, 2],
+                          fontSize: 16,
+                          margin: [10, 0, 0, 8],
                         },
                         {
                           text: `Variabilný symbol: ${invoice.variable_symbol}`,
                           color: 'white',
                           bold: true,
-                          fontSize: 11,
-                          margin: [5, 10, 0, 0],
+                          fontSize: 13,
+                          margin: [10, 5, 0, 0],
                         },
                         {
                           text: `IBAN: SK12 3456 7890 1234 5678 9012`,
                           color: 'white',
                           bold: true,
-                          fontSize: 11,
-                          margin: [5, 0, 0, 0],
+                          fontSize: 13,
+                          margin: [10, 5, 0, 0],
                         },
                       ],
                       width: '70%',
                     },
                     {
                       image: qrCode,
-                      width: 60,
+                      width: 80,
                       alignment: 'right',
-                      margin: [0, 0, 10, 0],
+                      margin: [0, 0, 15, 0],
                     },
                   ],
                 },
@@ -355,15 +545,17 @@ export class InvoicesService {
             ],
           },
           layout: {
-            fillColor: () => '#69a5fe',
+            fillColor: () => '#1976d2',
             hLineWidth: () => 0,
             vLineWidth: () => 0,
-            paddingTop: () => 8,
-            paddingBottom: () => 8,
+            paddingTop: () => 15,
+            paddingBottom: () => 15,
+            paddingLeft: () => 15,
+            paddingRight: () => 15,
           },
-          margin: [0, 10, 0, 0],
+          margin: [0, 15, 0, 20],
         },
-        { text: 'Položky', style: 'subheader', margin: [0, 20, 0, 5] },
+        { text: 'Položky', style: 'subheader', margin: [0, 10, 0, 10] },
         {
           table: {
             widths: withVat
@@ -373,50 +565,125 @@ export class InvoicesService {
           },
           layout: {
             fillColor: (rowIndex: number) =>
-              rowIndex === 0 ? '#f5f5f5' : null,
-            hLineColor: () => '#cccccc',
-            vLineColor: () => '#cccccc',
+              rowIndex === 0 ? '#e3f2fd' : null,
+            hLineColor: () => '#b0bec5',
+            vLineColor: () => '#b0bec5',
+            hLineWidth: (i: number) =>
+              i === 0 || i === itemsTable.length ? 2 : 1,
+            vLineWidth: () => 1,
+            paddingTop: (i: number) => (i === 0 ? 10 : 7),
+            paddingBottom: (i: number) => (i === 0 ? 10 : 7),
+            paddingLeft: () => 10,
+            paddingRight: () => 10,
           },
-          fontSize: 9,
-          margin: [0, 0, 0, 10],
+          fontSize: 11,
+          margin: [0, 0, 0, 25],
         },
 
         {
           columns: [
             { text: '' },
             {
-              stack: withVat
-                ? [
+              stack: (() => {
+                // Vypočítaj skutočnú zľavu
+                // POZOR: total_price je suma položiek PRED zľavou
+                let actualDiscount = invoice.discount || 0;
+                const originalPrice = invoice.total_price; // Toto je už suma položiek
+                let priceAfterDiscount = invoice.total_price;
+
+                if (invoice.discount_percent > 0) {
+                  // Vypočítaj zľavu z percentuálnej hodnoty
+                  actualDiscount =
+                    invoice.total_price * (invoice.discount_percent / 100);
+                  priceAfterDiscount = invoice.total_price - actualDiscount;
+                } else if (actualDiscount > 0) {
+                  priceAfterDiscount = invoice.total_price - actualDiscount;
+                }
+
+                const hasDiscount = actualDiscount > 0;
+
+                if (withVat) {
+                  return [
+                    ...(hasDiscount
+                      ? [
+                          {
+                            text: `Medzisúčet bez DPH: ${originalPrice.toFixed(2)} €`,
+                            margin: [0, 5, 0, 5],
+                            fontSize: 12,
+                            color: '#424242',
+                          },
+                          {
+                            text: `Zľava${(invoice.discount_percent || 0) > 0 ? ` (${invoice.discount_percent}%)` : ''}: -${actualDiscount.toFixed(2)} €`,
+                            margin: [0, 0, 0, 5],
+                            fontSize: 12,
+                            color: '#424242',
+                          },
+                        ]
+                      : []),
                     {
-                      text: `Cena spolu bez DPH: ${invoice.total_price.toFixed(2)} €`,
+                      text: `Cena spolu bez DPH: ${priceAfterDiscount.toFixed(2)} €`,
+                      margin: [0, 5, 0, 5],
+                      fontSize: 12,
+                      color: '#424242',
+                    },
+                    {
+                      text: `DPH 23%: ${(priceAfterDiscount * 0.23).toFixed(2)} €`,
+                      margin: [0, 0, 0, 5],
+                      fontSize: 12,
+                      color: '#424242',
+                    },
+                    {
+                      text: `Spolu na úhradu: ${(priceAfterDiscount * 1.23).toFixed(2)} €`,
+                      bold: true,
+                      fontSize: 16,
+                      color: '#1976d2',
+                    },
+                  ];
+                } else {
+                  return [
+                    ...(hasDiscount
+                      ? [
+                          {
+                            text: `Medzisúčet: ${originalPrice.toFixed(2)} €`,
+                            margin: [0, 5, 0, 5],
+                            fontSize: 12,
+                            color: '#424242',
+                          },
+                          {
+                            text: `Zľava${(invoice.discount_percent || 0) > 0 ? ` (${invoice.discount_percent}%)` : ''}: -${actualDiscount.toFixed(2)} €`,
+                            margin: [0, 0, 0, 5],
+                            fontSize: 12,
+                            color: '#424242',
+                          },
+                        ]
+                      : []),
+                    {
+                      text: `Spolu na úhradu: ${priceAfterDiscount.toFixed(2)} €`,
+                      bold: true,
+                      fontSize: 16,
+                      color: '#1976d2',
                       margin: [0, 5, 0, 0],
                     },
-                    {
-                      text: `DPH 23%: ${(invoice.total_price * 0.23).toFixed(2)} €`,
-                    },
-                    {
-                      text: `Spolu na úhradu: ${(invoice.total_price * 1.23).toFixed(2)} €`,
-                      bold: true,
-                      fontSize: 12,
-                    },
-                  ]
-                : [
-                    {
-                      text: `Spolu na úhradu: ${invoice.total_price.toFixed(2)} €`,
-                      bold: true,
-                      fontSize: 12,
-                      margin: [0, 5, 0, 0],
-                    },
-                  ],
+                  ];
+                }
+              })(),
               alignment: 'right',
             },
           ],
         },
         invoice.notes
           ? {
-              text: [{ text: 'Poznámka:\n', bold: true }, invoice.notes],
-              margin: [0, 10, 0, 10],
-              fontSize: 10,
+              text: [
+                {
+                  text: 'Poznámka:\n',
+                  bold: true,
+                  color: '#1976d2',
+                  fontSize: 12,
+                },
+                invoice.notes,
+              ],
+              margin: [0, 20, 0, 20],
+              fontSize: 11,
             }
           : null,
 
@@ -430,12 +697,14 @@ export class InvoicesService {
       styles: {
         tableHeaderBlue: {
           bold: true,
-          color: '#0d6efd',
-          fontSize: 10,
+          color: '#1976d2',
+          fontSize: 11,
         },
         subheader: {
-          fontSize: 12,
+          fontSize: 14,
           bold: true,
+          color: '#1976d2',
+          margin: [0, 5, 0, 5],
         },
       },
     };
@@ -459,6 +728,8 @@ export class InvoicesService {
     }[];
     notes?: string;
     total_price: number;
+    discount?: number;
+    discount_percent?: number;
   }): Promise<Invoice> {
     // ✅ Vygeneruj invoice_number rovnako ako pri automatických faktúrach
     const year = new Date().getFullYear();
@@ -481,6 +752,8 @@ export class InvoicesService {
       customer_address: data.customer_address,
       total_price: data.total_price,
       notes: data.notes || '',
+      discount: data.discount || 0,
+      discount_percent: data.discount_percent || 0,
       issue_date: new Date(),
       due_date: new Date(),
       issued_by: 'M. Macková',
@@ -518,5 +791,79 @@ export class InvoicesService {
     }
 
     return 'pending';
+  }
+
+  // 🧾 AUTOMATICKÉ FAKTUROVÁNIE - Payment Status Methods
+  async getPaymentStatus() {
+    try {
+      const invoices = await this.invoiceRepo.find({
+        order: { created_at: 'DESC' },
+      });
+
+      const today = new Date();
+      return invoices.map((invoice) => {
+        let status: 'paid' | 'unpaid' | 'overdue' | 'partially_paid' = 'unpaid';
+        let daysOverdue = 0;
+
+        if (invoice.due_date) {
+          const dueDate = new Date(invoice.due_date);
+          daysOverdue = Math.floor(
+            (today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24),
+          );
+
+          if (daysOverdue > 0) {
+            status = 'overdue';
+          }
+        }
+
+        return {
+          id: invoice.id,
+          invoice_number: invoice.invoice_number,
+          customer_name: invoice.customer_name,
+          total_price: invoice.total_price,
+          issue_date: invoice.issue_date,
+          due_date: invoice.due_date,
+          status,
+          daysOverdue: daysOverdue > 0 ? daysOverdue : undefined,
+          lastPaymentCheck: invoice.last_payment_check,
+          lastReminderSent: invoice.last_reminder_sent,
+        };
+      });
+    } catch (error) {
+      console.error('Chyba pri načítaní payment status:', error);
+      throw error;
+    }
+  }
+
+  async sendPaymentReminder(invoiceId: number) {
+    try {
+      const invoice = await this.invoiceRepo.findOne({
+        where: { id: invoiceId },
+      });
+      if (!invoice) {
+        throw new Error('Faktúra neexistuje');
+      }
+
+      // Pošli upomienku
+      const result = await this.emailService.sendPaymentReminder(invoice, 0);
+
+      // Aktualizuj last_reminder_sent
+      invoice.last_reminder_sent = new Date();
+      await this.invoiceRepo.save(invoice);
+
+      return {
+        message: result.sent
+          ? 'Upomienka odoslaná'
+          : `Upomienka sa nepodarila odoslať: ${result.message}`,
+        sent: result.sent,
+      };
+    } catch (error) {
+      console.error('Chyba pri odosielaní upomienky:', error);
+      throw error;
+    }
+  }
+
+  async testEmailConnection() {
+    return await this.emailService.testConnection();
   }
 }
