@@ -3,8 +3,6 @@ import axios from 'axios';
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
-export { API_URL };
-
 export const fetchOrders = async () => {
   const response = await axios.get(`${API_URL}/orders`);
   return response.data;
@@ -23,7 +21,7 @@ export const fetchInvoices = async (params?: {
   if (params?.status) queryParams.append('status', params.status);
 
   const response = await axios.get(
-    `${API_URL}/invoices?${queryParams.toString()}`
+    `${API_URL}/invoices?${queryParams.toString()}`,
   );
   return response.data;
 };
@@ -36,7 +34,7 @@ export const fetchInvoiceStats = async () => {
 export const createInvoice = async (
   orderId: number,
   selectedItemIds: number[],
-  notes: string
+  notes: string,
 ) => {
   const response = await axios.post(`${API_URL}/invoices`, {
     orderId,

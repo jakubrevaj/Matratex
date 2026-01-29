@@ -1,0 +1,56 @@
+# Environment files - NEVER commit these!
+.env
+.env.local
+.env.production
+.env.development
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# PDFs (generated files)
+pdfs/dodaky/*.pdf
+pdfs/stitky/*.pdf
+pdfs/prehlady/*.pdf
+
+# Keep the directories but not the files
+!pdfs/dodaky/.gitkeep
+!pdfs/stitky/.gitkeep
+!pdfs/prehlady/.gitkeep
+
+# Node modules
+node_modules/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# PM2
+.pm2/
+
+# Database backups
+*.sql
+backup_*/

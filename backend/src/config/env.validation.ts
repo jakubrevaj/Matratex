@@ -12,6 +12,7 @@ export class EnvironmentVariables {
   @IsString()
   DB_USERNAME: string;
 
+  @IsOptional()
   @IsString()
   DB_PASSWORD: string;
 
@@ -53,4 +54,3 @@ export function validate(config: Record<string, unknown>) {
   }
   return validatedConfig;
 }
-

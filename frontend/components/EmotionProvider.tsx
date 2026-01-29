@@ -25,6 +25,15 @@ const theme = createTheme({
       main: '#9c27b0',
     },
   },
+  components: {
+    MuiTextField: {
+      defaultProps: {
+        InputLabelProps: {
+          shrink: true,
+        },
+      },
+    },
+  },
 });
 
 export default function EmotionProvider({ children }: { children: ReactNode }) {

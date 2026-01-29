@@ -11,76 +11,95 @@ interface Shortcut {
 }
 
 export const useKeyboardShortcuts = () => {
-  const router = useRouter();
+  let router;
+  try {
+    router = useRouter();
+  } catch (error) {
+    // Router not mounted yet, skip shortcuts
+    router = null;
+  }
 
-  const shortcuts: Shortcut[] = [
-    {
-      key: 'n',
-      ctrlKey: true,
-      action: () => router.push('/orders/new'),
-      description: 'Nová objednávka',
-    },
-    {
-      key: 'i',
-      ctrlKey: true,
-      action: () => router.push('/invoices/new'),
-      description: 'Nová faktúra',
-    },
-    {
-      key: 'o',
-      ctrlKey: true,
-      action: () => router.push('/orders'),
-      description: 'Objednávky',
-    },
-    {
-      key: 'f',
-      ctrlKey: true,
-      action: () => router.push('/invoices'),
-      description: 'Faktúry',
-    },
-    {
-      key: 'p',
-      ctrlKey: true,
-      action: () => router.push('/production'),
-      description: 'Produkcia',
-    },
-    {
-      key: 'd',
-      ctrlKey: true,
-      action: () => router.push('/delivery'),
-      description: 'Dodávky',
-    },
-    {
-      key: 'h',
-      ctrlKey: true,
-      action: () => router.push('/'),
-      description: 'Domov',
-    },
-    {
-      key: 'b',
-      ctrlKey: true,
-      action: () => router.push('/dashboard'),
-      description: 'Dashboard',
-    },
-    {
-      key: 'H',
-      ctrlKey: true,
-      shiftKey: true,
-      action: () => showShortcutsHelp(),
-      description: 'Zobraziť klávesové skratky',
-    },
-    {
-      key: 'Escape',
-      action: () => {
-        // Zavrieť modály, dropdowny, atď.
-        const activeElement = document.activeElement as HTMLElement;
-        if (activeElement && activeElement.blur) {
-          activeElement.blur();
-        }
-      },
-      description: 'Zavrieť modál/vyhľadávanie',
-    },
-  ];
+  const shortcuts: Shortcut[] = router
+    ? [
+        {
+          key: 'n',
+          ctrlKey: true,
+          action: () => router.push('/orders/new'),
+          description: 'Nová objednávka',
+        },
+        {
+          key: 'i',
+          ctrlKey: true,
+          action: () => router.push('/invoices/new'),
+          description: 'Nová faktúra',
+        },
+        {
+          key: 'o',
+          ctrlKey: true,
+          action: () => router.push('/orders'),
+          description: 'Objednávky',
+        },
+        {
+          key: 'f',
+          ctrlKey: true,
+          action: () => router.push('/invoices'),
+          description: 'Faktúry',
+        },
+        {
+          key: 'p',
+          ctrlKey: true,
+          action: () => router.push('/production'),
+          description: 'Produkcia',
+        },
+        {
+          key: 'd',
+          ctrlKey: true,
+          action: () => router.push('/delivery'),
+          description: 'Dodávky',
+        },
+        {
+          key: 'h',
+          ctrlKey: true,
+          action: () => router.push('/'),
+          description: 'Domov',
+        },
+        {
+          key: 'b',
+          ctrlKey: true,
+          action: () => router.push('/dashboard'),
+          description: 'Dashboard',
+        },
+        {
+          key: 'H',
+          ctrlKey: true,
+          shiftKey: true,
+          action: () => showShortcutsHelp(),
+          description: 'Zobraziť klávesové skratky',
+        },
+        {
+          key: 'Escape',
+          action: () => {
+            // Zavrieť modály, dropdowny, atď.
+            const activeElement = document.activeElement as HTMLElement;
+            if (activeElement && activeElement.blur) {
+              activeElement.blur();
+            }
+          },
+          description: 'Zavrieť modál/vyhľadávanie',
+        },
+      ]
+    : [
+        {
+          key: 'Escape',
+          action: () => {
+            const activeElement = document.activeElement as HTMLElement;
+            if (activeElement && activeElement.blur) {
+              activeElement.blur();
+            }
+          },
+          description: 'Zavrieť modál/vyhľadávanie',
+        },
+      ];
 
   const showShortcutsHelp = () => {
     const helpText = shortcuts

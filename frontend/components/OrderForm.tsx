@@ -82,7 +82,7 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItemState[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
-    null
+    null,
   );
   const [newCustomerMode, setNewCustomerMode] = useState<boolean>(false);
   const [customerSearchInput, setCustomerSearchInput] = useState<string>('');
@@ -135,65 +135,65 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
         setProducts(productRes.data);
         setMaterials(materialRes.data);
 
-      if (mode === 'create') {
-        const today = new Date().toISOString().split('T')[0];
-        if (issueDateRef.current) issueDateRef.current.value = today;
-        setOrderItems([
-          {
-            productId: 0,
-            product_name: '',
-            material_name: '',
-            refs: generateRefs(),
-          },
-        ]);
-      }
-
-      if (mode === 'edit' && orderId) {
-        const res = await axios.get(`${API_URL}/orders/${orderId}`);
-        type FetchedOrderItem = {
-          product_id: number;
-          product_name: string;
-          material_name: string;
-          quantity?: number;
-          price?: number;
-          length?: number;
-          width?: number;
-          height?: number;
-          tech_width?: number;
-          notes_core?: string;
-          notes_cover?: string;
-          label_1?: string;
-          label_2?: string;
-          label_3?: string;
-          status?: string;
-        };
-        type FetchedOrder = {
-          order_number?: string;
-          issue_date: string;
-          notes?: string;
-          customer: Customer;
-          order_items: FetchedOrderItem[];
-        };
-        const order = res.data as FetchedOrder;
-        if (orderNumberRef.current)
-          orderNumberRef.current.value = order.order_number || '';
-        if (issueDateRef.current) {
-          const date = new Date(order.issue_date);
-          date.setDate(date.getDate() + 1);
-          issueDateRef.current.value = date.toISOString().split('T')[0];
+        if (mode === 'create') {
+          const today = new Date().toISOString().split('T')[0];
+          if (issueDateRef.current) issueDateRef.current.value = today;
+          setOrderItems([
+            {
+              productId: 0,
+              product_name: '',
+              material_name: '',
+              refs: generateRefs(),
+            },
+          ]);
         }
-        if (notesRef.current) notesRef.current.value = order.notes || '';
-        setSelectedCustomer(order.customer);
-        setOrderItems(
-          (order.order_items || []).map((item) => ({
-            ...item,
-            productId: item.product_id,
-            product_name: item.product_name,
-            material_name: item.material_name,
-            refs: generateRefs(),
-          }))
-        );
-      }
+
+        if (mode === 'edit' && orderId) {
+          const res = await axios.get(`${API_URL}/orders/${orderId}`);
+          type FetchedOrderItem = {
+            product_id: number;
+            product_name: string;
+            material_name: string;
+            quantity?: number;
+            price?: number;
+            length?: number;
+            width?: number;
+            height?: number;
+            tech_width?: number;
+            notes_core?: string;
+            notes_cover?: string;
+            label_1?: string;
+            label_2?: string;
+            label_3?: string;
+            status?: string;
+          };
+          type FetchedOrder = {
+            order_number?: string;
+            issue_date: string;
+            notes?: string;
+            customer: Customer;
+            order_items: FetchedOrderItem[];
+          };
+          const order = res.data as FetchedOrder;
+          if (orderNumberRef.current)
+            orderNumberRef.current.value = order.order_number || '';
+          if (issueDateRef.current) {
+            const date = new Date(order.issue_date);
+            date.setDate(date.getDate() + 1);
+            issueDateRef.current.value = date.toISOString().split('T')[0];
+          }
+          if (notesRef.current) notesRef.current.value = order.notes || '';
+          setSelectedCustomer(order.customer);
+          setOrderItems(
+            (order.order_items || []).map((item) => ({
+              ...item,
+              productId: item.product_id,
+              product_name: item.product_name,
+              material_name: item.material_name,
+              refs: generateRefs(),
+            })),
+          );
+        }
       } catch (error) {
         console.error('[OrderForm] Error fetching data:', error);
       }
@@ -213,7 +213,7 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
       setLoadingCustomers(true);
       try {
         const response = await axios.get(
-          `${API_URL}/customers?limit=100&search=${encodeURIComponent(customerSearchInput)}`
+          `${API_URL}/customers?limit=100&search=${encodeURIComponent(customerSearchInput)}`,
         );
         setCustomers(response.data);
       } catch (error) {
@@ -354,7 +354,7 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
 
   const buildItemsPayload = () => {
     const validItems = orderItems.filter((item) =>
-      (item.product_name || '').trim()
+      (item.product_name || '').trim(),
     );
     return validItems.map((item) => ({
       product_id: item.productId,
@@ -388,7 +388,7 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
 
     const totalPrice = preparedItems.reduce(
       (sum, item) => sum + (item.price || 0) * (item.quantity || 0),
-      0
+      0,
     );
 
     type OrderPayload = {
@@ -440,9 +440,17 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
             gap: 1,
           }}
         >
-          {mode === 'create'
-            ? <><CreateIcon sx={{ mr: 1 }} />Vytvorenie novej objednávky</>
-            : <><EditIcon sx={{ mr: 1 }} />Úprava objednávky</>}
+          {mode === 'create' ? (
+            <>
+              <CreateIcon sx={{ mr: 1 }} />
+              Vytvorenie novej objednávky
+            </>
+          ) : (
+            <>
+              <EditIcon sx={{ mr: 1 }} />
+              Úprava objednávky
+            </>
+          )}
         </Typography>
       </Stack>
 
@@ -571,8 +579,10 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
             ) : (
               <Autocomplete
                 options={customers}
-                getOptionLabel={(option) => 
-                  option.podnik ? `${option.podnik} (ID: ${option.id})` : `Neznámy (ID: ${option.id})`
+                getOptionLabel={(option) =>
+                  option.podnik
+                    ? `${option.podnik} (ID: ${option.id})`
+                    : `Neznámy (ID: ${option.id})`
                 }
                 getOptionKey={(option) => option.id}
                 isOptionEqualToValue={(option, value) =>
@@ -595,6 +605,9 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
                     placeholder="Začnite písať názov zákazníka..."
                     required
                     margin="dense"
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         borderRadius: 2,
@@ -1262,9 +1275,17 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
                   transition: 'all 0.2s ease',
                 }}
               >
-                {mode === 'create'
-                  ? <><CheckCircleIcon sx={{ mr: 0.5 }} />Vytvoriť objednávku</>
-                  : <><SaveIcon sx={{ mr: 0.5 }} />Uložiť zmeny</>}
+                {mode === 'create' ? (
+                  <>
+                    <CheckCircleIcon sx={{ mr: 0.5 }} />
+                    Vytvoriť objednávku
+                  </>
+                ) : (
+                  <>
+                    <SaveIcon sx={{ mr: 0.5 }} />
+                    Uložiť zmeny
+                  </>
+                )}
               </Button>
               {mode === 'edit' && (
                 <Button
@@ -1273,7 +1294,7 @@ export default function OrderForm({ mode, orderId }: OrderFormProps) {
                   fullWidth
                   onClick={async () => {
                     const confirmed = confirm(
-                      'Naozaj chcete zmazať celú objednávku?'
+                      'Naozaj chcete zmazať celú objednávku?',
                     );
                     if (!confirmed) return;
                     try {
