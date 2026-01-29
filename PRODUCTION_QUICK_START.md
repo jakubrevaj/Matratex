@@ -88,16 +88,26 @@ OWNER_EMAIL=revaj@matratex.sk
 
 ### Frontend: `frontend/.env.local`
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:3002
+# On production server (192.168.1.105)
+NEXT_PUBLIC_API_URL=http://192.168.1.105:3002
+
+# For local development
+# NEXT_PUBLIC_API_URL=http://localhost:3002
 ```
 
 ---
 
 ## URL adresy
 
-- **Frontend:** http://localhost:3001
-- **Backend API:** http://localhost:3002
+### Production Server (192.168.1.105)
+- **Frontend:** http://192.168.1.105:3001
+- **Backend API:** http://192.168.1.105:3002
 - **Database:** localhost:5432 (matratex)
+
+### Local Development
+- **Frontend:** http://localhost:3000 (dev) / http://localhost:3001 (prod)
+- **Backend API:** http://localhost:3002
+- **Database:** localhost:5432 (matrac_system)
 
 ---
 

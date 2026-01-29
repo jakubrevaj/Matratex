@@ -42,8 +42,8 @@
 - **Password:** admin
 
 ### Aplikácia
-- **Frontend:** http://localhost:3001
-- **Backend:** http://localhost:3002
+- **Frontend:** http://192.168.1.105:3001 (production) / http://localhost:3001 (local)
+- **Backend:** http://192.168.1.105:3002 (production) / http://localhost:3002 (local)
 - **Environment:** production
 
 ### Email (pripravené pre konfiguráciu)
